@@ -102,3 +102,31 @@ objectives** under the current linear+quadratic formulation. A genuine
 multi-objective optimizer (e.g., NSGA-II over the same feature space,
 or a Pareto-QAOA variant) would be needed to explore the frontier
 efficiently rather than by sweeping one parameter.
+
+## Known limitations
+
+### QAOA with per-pathway caps
+Running QAOA on the capped problem currently fails with:
+AerError: 'unknown instruction: QAOA'
+This is a version compatibility issue between `qiskit-algorithms`
+(`SamplingVQE` builds a `QAOAAnsatz` that it passes to the primitive
+without full decomposition) and `qiskit-aer` (the Aer compiler receives
+the ansatz as a composite instruction it does not know).
+
+The unconstrained QAOA *does* work and matches the exact solver
+(objective 6.4914 for n=12, k=8), which validates the quantum
+implementation. The capped case is left as a technical roadmap item:
+either (i) explicitly transpile the ansatz to primitive gates before
+sampling, or (ii) build a hand-rolled QAOA circuit with `AerSampler`
+and post-process bitstrings with a feasibility filter.
+
+### StatevectorSampler memory ceiling
+`StatevectorSampler` materialises the full `PauliEvolutionGate` matrix,
+which is `2^n × 2^n` complex numbers. n=12 is fine (~256 MB), n=14 is
+already 4 GB, n=16 is 64 GB. This is why `AerSampler` is used for larger
+problems — but only when the ansatz compiles cleanly (see above).
+
+### Feasibility of low caps
+With `k=8` genes and 4 pathways, `--max-per-pathway 1` is infeasible
+by construction (at most 4 genes can be selected). The Pareto sweep
+therefore starts at `cap=2`.
