@@ -1,0 +1,17 @@
+name: absolutus
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - numpy
+  - pandas
+  - scipy
+  - scikit-learn
+  - requests
+  - pip
+  - pip:
+      - qiskit>=1.0
+      - qiskit-algorithms>=0.3
+      - qiskit-optimization>=0.6
+      - qiskit-aer>=0.14

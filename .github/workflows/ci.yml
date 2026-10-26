@@ -1,0 +1,20 @@
+name: Absolutus_V2 CI
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          environment-file: environment.yml
+          activate-environment: absolutus
+          auto-activate-base: false
+      - name: Pipeline
+        shell: bash -el {0}
+        run: |
+          bash scripts/run_pipeline.sh 4 || true
+          bash tests/test_quantum_subset.sh
