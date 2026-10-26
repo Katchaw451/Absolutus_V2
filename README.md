@@ -147,3 +147,46 @@ therefore starts at `cap=2`.
   so that the overlap matrix has transcrito↔protein cross-terms. This
   is the single biggest gap between the project title ("multi-omics")
   and the current implementation (transcriptomics only).
+
+## Findings (iteration 4: 2D Pareto surface over k and cap)
+
+Sweeping k ∈ {4, 6, 8, 10} × cap ∈ {2, 3, 4} with the exact solver
+produces a clean 2D structure:
+
+| k \ cap | 2              | 3              | 4              |
+|---------|----------------|----------------|----------------|
+| 4       | 2 pw, 0 hubs   | 2 pw, 0 hubs   | 1 pw, 0 hubs   |
+| 6       | 3 pw, 0 hubs   | 2 pw, 1 hub    | 2 pw, 0 hubs   |
+| 8       | 4 pw, 0 hubs   | 3 pw, 1 hub    | 2 pw, 2 hubs   |
+| 10      | (infeasible)   | 4 pw, 1 hub    | 3 pw, 2 hubs   |
+
+Three regularities emerge:
+
+1. **k and cap act almost orthogonally.** Holding cap fixed and
+   increasing k increases pathway coverage (rows). Holding k fixed and
+   increasing cap increases hub recovery (columns). This is a
+   consequence of the QUBO design: k controls how many features are
+   drawn, cap controls how they are distributed across pathways, and
+   hub recovery depends on whether the two hubs (CDC42, RAB3A) survive
+   the top-cap cut within synaptic_function.
+
+2. **k=10 strictly dominates k=8 at cap=4.** Same hub count (2), more
+   pathways (3 vs 2), higher objective (13.92 vs 12.77). This is a
+   genuine Pareto improvement, revealing that the k=8 Pareto frontier
+   was a projection artefact of fixing k. Fixing k can hide better
+   solutions; the correct object is the k-agnostic frontier.
+
+3. **CALM3 is never recovered at any (k, cap).** The calmodulin gene
+   has systematically lower variance in GSE5281/GSE49036 than its
+   synaptic peers CDC42, RAB3A, SNAP25, VAMP2. Biologically this is
+   expected — CALM3 is one of the most conserved eukaryotic proteins
+   and has near-housekeeping expression. Variance-based feature
+   selection therefore *systematically excludes* highly conserved
+   disease hubs. Any method that ranks features purely by variance
+   will miss this class of genes. This motivates the next iteration:
+   use network connectivity (STRING, BioGRID) as an alternative or
+   complementary ranking criterion.
+
+### Infeasibility
+k=10 with cap=2 is infeasible by construction: 4 pathways × cap 2 = at
+most 8 genes can be selected. The sweep skips it silently.
