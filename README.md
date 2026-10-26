@@ -229,3 +229,7 @@ The natural next experiment is a **two-parameter sweep** over
 Pareto frontier between CALM3 recovery (high weight) and RAB3A
 recovery (low weight). This makes the hub-heterogeneity claim
 quantitative rather than anecdotal.
+
+## License
+
+MIT License — see [LICENSE](LICENSE).
