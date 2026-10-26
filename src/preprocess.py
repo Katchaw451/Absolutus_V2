@@ -1,17 +1,14 @@
-"""preprocess.py - map probes to gene symbols, filter confounders, score."""
+"""preprocess.py - map probes, filter confounders, score with network degree."""
 from __future__ import annotations
-import argparse, gzip
+import argparse, gzip, json, math
 from pathlib import Path
 import numpy as np, pandas as pd
 
-# Sex-linked genes that confound case/control comparisons
 SEX_LINKED = {
     "XIST", "RPS4Y1", "RPS4Y2", "EIF1AY", "USP9Y", "KDM5D", "DDX3Y",
     "UTY", "ZFY", "TXLNGY", "NLGN4Y", "TMSB4Y", "PRKY", "AMELY",
-    "CYorf15A", "CYorf15B",
 }
 
-# Curated pathway membership for a priori prioritisation
 PATHWAY_MEMBERS = {
     "mitochondrial_dysfunction": {"NDUFA1","NDUFB2","SDHA","SDHB","COX5A",
                                   "ATP5A1","ATP5B","UQCRC1","UQCRC2","CYCS"},
@@ -42,7 +39,7 @@ def _read_series_matrix(path):
 
 def load_gpl_mapping(gpl_path):
     mapping = {}
-    if not gpl_path.exists():
+    if not Path(gpl_path).exists():
         return mapping
     with gzip.open(gpl_path, "rt", encoding="utf-8", errors="ignore") as fh:
         header = None
@@ -54,15 +51,22 @@ def load_gpl_mapping(gpl_path):
             if f0.startswith(("#", "^", "!")):
                 continue
             if header is None:
-                if "ID" in fields and ("Gene symbol" in fields or "Gene Symbol" in fields):
+                if "ID" in fields and "Gene symbol" in fields:
                     header = fields
                 continue
             d = dict(zip(header, fields))
-            p = d.get("ID", "").strip()
-            s = d.get("Gene symbol", d.get("Gene Symbol", "")).strip()
-            if p and s and s not in ("---", ""):
-                mapping[p] = s
+            probe = d.get("ID", "").strip()
+            sym = d.get("Gene symbol", "").strip()
+            if probe and sym and sym != "---":
+                mapping[probe] = sym
     return mapping
+
+
+def resolve_symbol(sym):
+    """For multi-gene probes, take the first symbol. Else return as-is."""
+    if "///" in sym:
+        return sym.split("///")[0].strip()
+    return sym
 
 
 def filter_and_map(df, mapping):
@@ -70,10 +74,8 @@ def filter_and_map(df, mapping):
     for probe in df.index:
         if probe.startswith("AFFX") or probe not in mapping:
             continue
-        sym = mapping[probe]
-        if "///" in sym:            # multi-gene probes
-            continue
-        if sym in SEX_LINKED:       # sex-linked confounders
+        sym = resolve_symbol(mapping[probe])
+        if sym in SEX_LINKED or sym == "":
             continue
         probes.append(probe); symbols.append(sym)
     if not probes:
@@ -88,10 +90,7 @@ def compute_relevance(df):
 
 
 def is_pathway_gene(sym):
-    for members in PATHWAY_MEMBERS.values():
-        if sym in members:
-            return 1.0
-    return 0.0
+    return 1.0 if any(sym in m for m in PATHWAY_MEMBERS.values()) else 0.0
 
 
 def main():
@@ -99,37 +98,47 @@ def main():
     p.add_argument("--ad", default="data/raw/GSE5281_series_matrix.txt.gz")
     p.add_argument("--pd", default="data/raw/GSE49036_series_matrix.txt.gz")
     p.add_argument("--ad-annot", default="data/annotation/GPL570.annot.gz")
-    p.add_argument("--pd-annot", default="")
+    p.add_argument("--degrees", default="data/reference/string_degrees.json")
     p.add_argument("--out", default="data/processed/features.csv")
+    p.add_argument("--degree-weight", type=float, default=0.5,
+                   help="Weight of log-normalised STRING degree in priority.")
     args = p.parse_args()
 
     ad = _read_series_matrix(Path(args.ad))
     pd_ = _read_series_matrix(Path(args.pd))
-    ad_map = load_gpl_mapping(Path(args.ad_annot))
-    pd_annot = Path(args.pd_annot) if args.pd_annot else Path(args.ad_annot)
-    pd_map = load_gpl_mapping(pd_annot) if pd_annot.exists() else ad_map
-    print(f"[info] AD probes: {len(ad)}  mapped: {len(ad_map)}")
-    print(f"[info] PD probes: {len(pd_)}  mapped: {len(pd_map)}")
+    mapping = load_gpl_mapping(Path(args.ad_annot))
 
-    ad = filter_and_map(ad, ad_map)
-    pd_ = filter_and_map(pd_, pd_map)
-    print(f"[info] AD genes after filter: {len(ad)}  PD: {len(pd_)}")
+    ad = filter_and_map(ad, mapping)
+    pd_ = filter_and_map(pd_, mapping)
+    print(f"[info] genes after filtering: {len(ad)}")
 
     ad_s = compute_relevance(ad).rename("ad_score")
     pd_s = compute_relevance(pd_).rename("pd_score")
     m = pd.concat([ad_s, pd_s], axis=1)
     m["shared_score"] = np.minimum(m["ad_score"], m["pd_score"])
     m["in_pathway"] = [is_pathway_gene(s) for s in m.index]
-    # Priority score: pathway genes get a strong bonus so they survive top-k
-    m["priority"] = m["shared_score"] + 2.0 * m["in_pathway"]
-    m = m.dropna().sort_values("priority", ascending=False)
 
+    degrees = {}
+    if Path(args.degrees).exists():
+        degrees = json.loads(Path(args.degrees).read_text())
+        print(f"[info] loaded {len(degrees)} STRING degrees")
+    m["string_degree"] = [degrees.get(g, 0) for g in m.index]
+    max_deg = max(m["string_degree"].max(), 1)
+    m["degree_score"] = m["string_degree"].apply(
+        lambda d: math.log1p(d) / math.log1p(max_deg)
+    )
+    m["priority"] = (m["shared_score"]
+                     + 2.0 * m["in_pathway"]
+                     + args.degree_weight * m["degree_score"])
+
+    m = m.dropna().sort_values("priority", ascending=False)
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     m.to_csv(args.out)
     print(f"[ok ] {len(m)} genes -> {args.out}")
-    print(f"[info] pathway genes present: {int(m['in_pathway'].sum())}")
-    print("\nTop 15 by priority:")
-    print(m.head(15)[["ad_score","pd_score","shared_score","in_pathway"]].to_string())
+    print(f"[info] CALM3 in features: {'CALM3' in m.index}")
+    print("\nTop 20 by priority:")
+    print(m.head(20)[["ad_score","pd_score","shared_score",
+                     "in_pathway","string_degree","degree_score","priority"]].to_string())
 
 
 if __name__ == "__main__":
