@@ -190,3 +190,42 @@ Three regularities emerge:
 ### Infeasibility
 k=10 with cap=2 is infeasible by construction: 4 pathways × cap 2 = at
 most 8 genes can be selected. The sweep skips it silently.
+
+## Findings (iteration 5: network degree vs variance)
+
+With CALM3 now in the candidate pool (recovered via multi-gene probe
+resolution), we compared the two score fields across caps:
+
+| cap | shared_score (variance only) | priority (variance + STRING degree) |
+|-----|------------------------------|--------------------------------------|
+| 2   | 4 pathways, **0 hubs**       | 4 pathways, **2 hubs** (CALM3, CDC42) |
+| 3   | 3 pathways, 1 hub            | 3 pathways, 2 hubs                   |
+| 4   | 3 pathways, 2 hubs (CDC42, RAB3A) | 3 pathways, 2 hubs (CALM3, CDC42) |
+| 6   | 2 pathways, **3 hubs**       | 2 pathways, **3 hubs**               |
+| 8   | 2 pathways, 3 hubs           | 2 pathways, 3 hubs                   |
+
+Three results:
+
+1. **Degree is decisive under a tight cap.** At cap=2, variance-only
+   recovers zero hubs; degree-enhanced recovers two (CALM3, CDC42) with
+   identical pathway coverage (4/4). No trade-off — pure dominance.
+
+2. **At cap>=6 the two scores converge** (both recover all three hubs),
+   because the constraint stops binding: the 12-feature pool cannot
+   violate a cap of 6 within any single pathway. The marginal value of
+   the degree signal is therefore concentrated in the regime where the
+   problem is genuinely constrained.
+
+3. **CALM3 and RAB3A are opposite hub sub-types.** Variance-only prefers
+   RAB3A (moderate variance, STRING degree 53); degree-enhanced prefers
+   CALM3 (low variance, STRING degree 348). No single score recovers
+   both simultaneously at low cap. This reframes the "CALM3 problem" as
+   a finding: AD/PD hubs are not a homogeneous class, and any single
+   ranking signal will bias toward one sub-type.
+
+### Implication
+The natural next experiment is a **two-parameter sweep** over
+`--degree-weight` in {0, 0.1, 0.25, 0.5, 1.0, 2.0}, tracing the
+Pareto frontier between CALM3 recovery (high weight) and RAB3A
+recovery (low weight). This makes the hub-heterogeneity claim
+quantitative rather than anecdotal.
