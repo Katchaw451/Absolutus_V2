@@ -130,3 +130,20 @@ problems — but only when the ansatz compiles cleanly (see above).
 With `k=8` genes and 4 pathways, `--max-per-pathway 1` is infeasible
 by construction (at most 4 genes can be selected). The Pareto sweep
 therefore starts at `cap=2`.
+
+## Roadmap
+
+### Done
+- Iteration 1: pipeline end-to-end, QUBO collapse to single pathway
+- Iteration 2: diversity constraint, 2-point trade-off
+- Iteration 3: 3-point Pareto frontier (cap 2-4), saturates at cap=4
+- Iteration 4: 2D Pareto sweep over (k, cap)
+
+### Next
+- **True multi-objective optimisation** (NSGA-II via pymoo) over
+  (-objective, +hub_count, +pathway_count) to sample the Pareto
+  surface densely without a grid.
+- **Second omics layer**: add proteomics (e.g., GNPC harmonised data)
+  so that the overlap matrix has transcrito↔protein cross-terms. This
+  is the single biggest gap between the project title ("multi-omics")
+  and the current implementation (transcriptomics only).
