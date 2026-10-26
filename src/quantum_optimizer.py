@@ -52,7 +52,7 @@ def solve_qaoa(rel, ov, k, reps, maxiter, names, cap=None):
     from qiskit_optimization.converters import LinearInequalityToPenalty
     from qiskit_algorithms import QAOA
     from qiskit_algorithms.optimizers import COBYLA
-    from qiskit.primitives import StatevectorSampler
+    from qiskit_aer.primitives import SamplerV2 as AerSampler
 
     n = len(rel)
     if n > 12:
@@ -80,7 +80,7 @@ def solve_qaoa(rel, ov, k, reps, maxiter, names, cap=None):
         # Convert <= to penalty so MinimumEigenOptimizer does not add slack qubits
         qp = LinearInequalityToPenalty(penalty=100.0).convert(qp)
 
-    qaoa = QAOA(sampler=StatevectorSampler(),
+    qaoa = QAOA(sampler=AerSampler(),
                 optimizer=COBYLA(maxiter=maxiter), reps=reps)
     result = MinimumEigenOptimizer(qaoa).solve(qp)
     x = np.asarray(result.x).astype(int)

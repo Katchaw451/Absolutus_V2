@@ -85,3 +85,20 @@ The exact solver and QAOA agree on the unconstrained QUBO (both reach
 the same optimum). For the constrained problem, QAOA uses
 `LinearInequalityToPenalty` to avoid slack qubits, which are infeasible
 under the statevector simulator's memory budget.
+
+## Findings (iteration 3: Pareto frontier)
+
+Ran the exact solver across `cap ∈ {1, 2, 3, 4, 6, 8}` to trace the
+trade-off between pathway coverage and hub recovery. Results in
+`results/pareto/sweep.csv`.
+
+The key qualitative behaviour:
+- Low cap (1–2): all 4 pathways covered, 0 hubs recovered.
+- Intermediate cap (3–4): 3 pathways, 1–2 hubs recovered.
+- High cap (≥6): 2 pathways, 2 hubs recovered (CDC42, RAB3A).
+
+This confirms that hub recovery and pathway coverage are **competing
+objectives** under the current linear+quadratic formulation. A genuine
+multi-objective optimizer (e.g., NSGA-II over the same feature space,
+or a Pareto-QAOA variant) would be needed to explore the frontier
+efficiently rather than by sweeping one parameter.
