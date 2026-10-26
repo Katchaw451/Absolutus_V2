@@ -233,3 +233,91 @@ quantitative rather than anecdotal.
 ## License
 
 MIT License — see [LICENSE](LICENSE).
+
+## Limitations
+
+The current implementation is a **well-documented toy problem**, not a
+scientific result. The following limitations are structural and were
+identified in external review; they are listed here so that the gap
+between this repository and a publishable study is explicit.
+
+### 1. Circular validation
+The candidate pool has 12 genes. The known hubs (CALM3, CDC42, RAB3A)
+are forced into the pool via `--include-hubs`, and the four pathways
+are hand-curated. The `PASS`/`FAIL` outcome therefore measures whether
+the solver selects among 12 pre-chosen candidates, not whether the
+method discovers anything. A valid design requires:
+- the full gene universe (~20,000 genes), or at least several hundred;
+- the hub list fixed **before** the experiment, independently of the
+  pool construction;
+- a permutation null (repeat the pipeline with random gene sets of
+  equal size) to calibrate what "recovered" means.
+
+### 2. The quantum component is decorative at this scale
+`C(12, 8) = 495` combinations. The exact brute-force solver is
+instantaneous. QAOA matching the exact solver validates the
+implementation, not any quantum advantage. The constrained case (the
+one that matters) fails at runtime. **There is no quantum result in
+this repository — the result is purely classical.** To make QAOA
+meaningful, the problem must scale beyond brute force (`n >= 25`), and
+must be compared against strong classical baselines (ILP, simulated
+annealing, DOMINO, DIAMOnD, heinz), not against an exact solver on a
+12-variable problem.
+
+### 3. STRING degree is study-biased
+CALM3's degree of 348 reflects, in part, how promiscuous and how
+well-studied calmodulin is. Recovering degree-defined hubs using a
+degree-based score is partially circular. The claim that "CALM3 and
+RAB3A are opposite hub sub-types" rests on two genes and is a
+hypothesis, not a result. A valid test would use many more genes and
+compare against degree-matched controls.
+
+### 4. Variance is not disease relevance
+The score uses raw expression variance, not case/control effect sizes.
+GSE5281 (multiple brain regions) and GSE49036 (substantia nigra) are
+different tissues, and the synaptic-gene signal is likely dominated by
+neuronal loss and cell-composition shifts. Without deconvolution or
+covariate adjustment, "shared between AD and PD" may mean only
+"neurons die in both".
+
+### 5. The QUBO formulation rewards the wrong thing
+The quadratic pathway-overlap term rewards concentration (all genes in
+one pathway), which is the opposite of the desired diversity. This was
+discovered empirically (iteration 1) and patched with a hard cap, but
+the patch does not fix the formulation. The natural formulation is
+**densest-k-subgraph on a PPI network**: linear weight = evidence,
+quadratic weight = network cohesion, plus a redundancy penalty. That is
+where the QUBO literature on disease modules provides both a principled
+objective and classical baselines.
+
+### 6. "Multi-omics" is transcriptomics only
+The repository title over-promises. Only transcriptomic data is used.
+Adding proteomics (e.g., GNPC harmonised data) requires an access
+request and should be started early.
+
+### 7. Artefacts of a small pool
+The "k and cap are nearly orthogonal" regularity and the
+"CALM3 ↔ RAB3A trade-off" are artefacts of a 12-gene pool across 4
+pathways. The trade-off is manufactured by `cap=4`: at `cap=6` all
+three hubs coexist. The `--degree-weight` sweep is a step function,
+not a smooth frontier, and is driven by degree-ranked substitution
+(RAB3A → CALM3, HSPB1 → COX5A). Comparing objective values across
+different `k` is also invalid, because the positive linear terms sum.
+
+### 8. QAOA technical issues (separate from the formulation)
+Two distinct failures were observed:
+- `unknown instruction: QAOA` — the `AerSampler` receives the
+  `QAOAAnsatz` as a composite instruction. Likely fixable by
+  transpiling the ansatz to basis gates before sampling.
+- 64 GB allocation at n=16 — the `StatevectorSampler` materialises
+  `PauliEvolutionGate.to_matrix()`, which is `2^n × 2^n` complex
+  numbers. This is a different problem and is not fixed by transpiling.
+
+### What this repository is good for
+- A reproducible pipeline (`environment.yml`, CI, tests, license).
+- An honest record of negative results (the all-in-one-pathway
+  attractor, the QAOA-with-constraints failure, the k=10/cap=2
+  infeasibility).
+- A documented baseline that a future `Absolutus_V3` can compare
+  against, with the five structural problems above explicitly
+  addressed in the new design.
