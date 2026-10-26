@@ -14,6 +14,7 @@ PATHWAYS = {
     "synaptic_function": {"RAB3A","SNAP25","SYN1","CALM3","CDC42",
                           "STX1A","VAMP2","SNAP29","RAB5A","DNM1"},
 }
+KNOWN_HUBS = {"CALM3", "CDC42", "RAB3A"}
 
 
 def build_overlap(names):
@@ -28,9 +29,9 @@ def build_overlap(names):
     return mat
 
 
-def stratified_select(feats, top_k, per_pathway=2):
-    """Take per_pathway genes from each pathway, then fill by priority."""
+def stratified_select(feats, top_k, per_pathway, include_hubs):
     selected, seen = [], set()
+    # Pass 1: top genes per pathway
     for pathway, members in PATHWAYS.items():
         in_feats = [g for g in feats.index if g in members]
         if not in_feats:
@@ -39,7 +40,11 @@ def stratified_select(feats, top_k, per_pathway=2):
         for gene in ranked.index[:per_pathway]:
             if gene not in seen and len(selected) < top_k:
                 selected.append(gene); seen.add(gene)
-    # Fill remaining slots by global priority
+    # Pass 2: forced hubs
+    for hub in include_hubs:
+        if hub in feats.index and hub not in seen and len(selected) < top_k:
+            selected.append(hub); seen.add(hub)
+    # Pass 3: fill by priority
     for gene in feats.sort_values("priority", ascending=False).index:
         if len(selected) >= top_k:
             break
@@ -53,14 +58,12 @@ def main():
     p.add_argument("--features", default="data/processed/features.csv")
     p.add_argument("--out", default="data/processed/overlap.npy")
     p.add_argument("--top-k", type=int, default=10)
-    p.add_argument("--per-pathway", type=int, default=2,
-                   help="Minimum genes per pathway before filling by priority.")
+    p.add_argument("--per-pathway", type=int, default=2)
+    p.add_argument("--include-hubs", nargs="*", default=[])
     args = p.parse_args()
 
     feats = pd.read_csv(args.features, index_col=0)
-    selected = stratified_select(feats, args.top_k, args.per_pathway)
-    top = feats.loc[selected]
-
+    selected = stratified_select(feats, args.top_k, args.per_pathway, args.include_hubs)
     ov = build_overlap(selected)
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     np.save(args.out, ov)
@@ -69,8 +72,9 @@ def main():
     print("Features in network (stratified):")
     for name in selected:
         row = feats.loc[name]
-        flag = " [pathway]" if row.get("in_pathway", 0) else ""
-        print(f"  - {name:<12} shared={row['shared_score']:.3f}{flag}")
+        tags = " [pathway]" if row.get("in_pathway", 0) else ""
+        tags += " [HUB]" if name in KNOWN_HUBS else ""
+        print(f"  - {name:<12} shared={row['shared_score']:.3f}{tags}")
 
 
 if __name__ == "__main__":

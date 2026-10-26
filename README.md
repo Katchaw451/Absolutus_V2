@@ -46,3 +46,42 @@ would sacrifice the much larger neuroinflammation quadratic reward.
    subsets, then union them into a pathway-stratified module.
 3. Compare exact vs. QAOA under the reformulated objective to see whether
    QAOA's approximation quality is affected by the landscape change.
+
+## Findings (iteration 2: diversity constraint vs hub recovery)
+
+### Experiment
+k=8 genes selected from a 12-gene candidate pool (2 per pathway
+plus forced hubs CALM3, CDC42, RAB3A), with and without a
+`--max-per-pathway 2` constraint.
+
+| Config | Objective | Pathways | Hubs | Verdict |
+|--------|-----------|----------|------|---------|
+| No cap | 12.77 | 2/4 | CDC42, RAB3A | PASS |
+| Cap=2  | 4.74  | 4/4 | none | FAIL (hubs) |
+
+### Interpretation
+The cap forces pathway diversity at the cost of ~63% of the objective
+value. Critically, it **loses all three known hubs**, because those hubs
+have systematically lower variance in these microarray datasets than
+their pathway peers (SNAP25, VAMP2 in synaptic_function). When the cap
+selects the "top 2 per pathway", the higher-variance peers win.
+
+### Scientific implication
+There is a genuine tension between two desirable properties of a
+shared-disease module:
+1. **Hub recovery**: selecting low-variance, biologically critical genes
+   that meta-analyses identify as shared between AD and PD.
+2. **Pathway coverage**: ensuring the module spans multiple mechanisms.
+
+The current objective (linear shared relevance + quadratic pathway
+overlap) cannot deliver both simultaneously. This is not a solver
+limitation — it is a property of the feature-selection problem itself,
+and it is the kind of finding that motivates **multi-objective
+formulations** (e.g., Pareto front over hub recovery and pathway
+coverage) rather than single-objective QUBO.
+
+### QAOA note
+The exact solver and QAOA agree on the unconstrained QUBO (both reach
+the same optimum). For the constrained problem, QAOA uses
+`LinearInequalityToPenalty` to avoid slack qubits, which are infeasible
+under the statevector simulator's memory budget.
