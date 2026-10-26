@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
+SCORE="${1:-shared_score}"
 mkdir -p results/pareto
-printf "cap,objective,pathways,hubs,selected\n" > results/pareto/sweep.csv
+OUT="results/pareto/sweep_${SCORE}.csv"
+printf "cap,objective,pathways,hubs,selected\n" > "$OUT"
 
-# k=8, 4 pathways -> cap must be >= 2 for feasibility
 for cap in 2 3 4 6 8; do
     if ! python src/quantum_optimizer.py --k 8 --solver exact \
-            --max-per-pathway "$cap" \
-            --out "results/pareto/cap_${cap}.json" >/dev/null 2>&1; then
-        echo "[skip] cap=${cap} infeasible" >&2
+            --max-per-pathway "$cap" --score-field "$SCORE" \
+            --out "results/pareto/${SCORE}_cap_${cap}.json" >/dev/null 2>&1; then
         continue
     fi
-    python - <<PY "results/pareto/cap_${cap}.json" "$cap" >> results/pareto/sweep.csv
+    python - <<PY "results/pareto/${SCORE}_cap_${cap}.json" "$cap" >> "$OUT"
 import json, sys
 KNOWN = {"CALM3","CDC42","RAB3A"}
 PW = {
@@ -20,10 +20,10 @@ PW = {
   "proteo": {"HSPA1A","HSPA8","PSMD1","UBB","SQSTM1","HSPB1","DNAJB1","BAG3","MAP1LC3B","ATG5"},
   "syn":    {"RAB3A","SNAP25","SYN1","CALM3","CDC42","STX1A","VAMP2","SNAP29","RAB5A","DNM1"},
 }
-d = json.load(open(sys.argv[1])); sel = set(d["selected_features"]); cap = sys.argv[2]
-n_pw   = sum(1 for m in PW.values() if m & sel)
-n_hubs = len(KNOWN & sel)
-print(f"{cap},{d['objective_value']:.4f},{n_pw},{n_hubs},{'|'.join(sorted(sel))}")
+d = json.load(open(sys.argv[1])); sel = set(d["selected_features"])
+n_pw = sum(1 for m in PW.values() if m & sel)
+print(f"{sys.argv[2]},{d['objective_value']:.4f},{n_pw},{len(KNOWN & sel)},{'|'.join(sorted(sel))}")
 PY
 done
-column -t -s',' results/pareto/sweep.csv
+echo "=== ${SCORE} ==="
+column -t -s',' "$OUT"

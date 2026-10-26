@@ -96,14 +96,16 @@ def main():
     p.add_argument("--reps", type=int, default=1)
     p.add_argument("--maxiter", type=int, default=30)
     p.add_argument("--max-per-pathway", type=int, default=None)
+    p.add_argument("--score-field", default="shared_score",
+                   choices=["shared_score", "priority"])
     p.add_argument("--out", default="results/quantum_selection.json")
     args = p.parse_args()
 
     names = json.loads(Path(args.overlap).with_suffix(".names.json").read_text())
-    rel = pd.read_csv(args.features, index_col=0).loc[names]["shared_score"].to_numpy()
+    rel = pd.read_csv(args.features, index_col=0).loc[names][args.score_field].to_numpy()
     ov = np.load(args.overlap)
 
-    print(f"[info] solver={args.solver}  n={len(names)}  k={args.k}  cap={args.max_per_pathway}")
+    print(f"[info] solver={args.solver}  n={len(names)}  k={args.k}  cap={args.max_per_pathway}  score={args.score_field}")
     if args.solver == "exact":
         obj, idx = solve_exact(rel, ov, args.k, names, args.max_per_pathway)
     else:
@@ -112,7 +114,7 @@ def main():
 
     selected = [names[i] for i in idx]
     payload = {"solver": args.solver, "k": args.k, "reps": args.reps,
-               "max_per_pathway": args.max_per_pathway,
+               "max_per_pathway": args.max_per_pathway, "score_field": args.score_field,
                "objective_value": float(obj), "selected_features": selected}
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(json.dumps(payload, indent=2))
